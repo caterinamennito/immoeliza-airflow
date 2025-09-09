@@ -27,55 +27,59 @@ from sqlalchemy.dialects.postgresql import insert
 
 
 class Scraper:
-    KEY_LIST = [
-        "url",
-        "address",
-        "price",
-        "State of the property",
-        "Build Year",
-        "Availability",
-        "Number of bedrooms",
-        "Surface bedroom 1",
-        "Surface bedroom 2",
-        "Surface bedroom 3",
-        "Livable surface",
-        "Furnished",
-        "Surface of living-room",
-        "Cellar",
-        "Diningroom",
-        "Surface of the diningroom",
-        "Kitchen equipment",
-        "Surface kitchen",
-        "Number of bathrooms",
-        "Number of showers",
-        "Number of toilets",
-        "Type of heating",
-        "Type of glazing",
-        "Entry phone",
-        "Elevator",
-        "Access for disabled",
-        "Orientation of the front facade",
-        "Floor of appartment",
-        "Number of facades",
-        "Number of floors",
-        "Garden",
-        "Surface garden",
-        "Terrace",
-        "Surface terrace",
-        "Total land surface",
-        "Sewer Connection",
-        "Gas",
-        "Running water",
-        "Swimming pool",
-        "Specific primary energy consumption",
-        "Validity date EPC/PEB",
-        "CO2 emission",
-        "Certification - Electrical installation",
-        "Flooding Area type",
-        "Demarcated flooding area",
-        "postal_code",
-        "city",
-    ]
+    # Mapping from scraped keys to DB column names (lower_case_with_underscore)
+    SCRAPED_TO_DB = {
+        "url": "url",
+        "address": "address",
+        "price": "price",
+        "State of the property": "state_of_the_property",
+        "Build Year": "build_year",
+        "Availability": "availability",
+        "Number of bedrooms": "number_of_bedrooms",
+        "Surface bedroom 1": "surface_bedroom_1",
+        "Surface bedroom 2": "surface_bedroom_2",
+        "Surface bedroom 3": "surface_bedroom_3",
+        "Livable surface": "livable_surface",
+        "Furnished": "furnished",
+        "Surface of living-room": "surface_of_living_room",
+        "Cellar": "cellar",
+        "Diningroom": "diningroom",
+        "Surface of the diningroom": "surface_of_the_diningroom",
+        "Kitchen equipment": "kitchen_equipment",
+        "Surface kitchen": "surface_kitchen",
+        "Number of bathrooms": "number_of_bathrooms",
+        "Number of showers": "number_of_showers",
+        "Number of toilets": "number_of_toilets",
+        "Type of heating": "type_of_heating",
+        "Type of glazing": "type_of_glazing",
+        "Entry phone": "entry_phone",
+        "Elevator": "elevator",
+        "Access for disabled": "access_for_disabled",
+        "Orientation of the front facade": "orientation_of_the_front_facade",
+        "Floor of appartment": "floor_of_appartment",
+        "Number of facades": "number_of_facades",
+        "Number of floors": "number_of_floors",
+        "Garden": "garden",
+        "Surface garden": "surface_garden",
+        "Terrace": "terrace",
+        "Surface terrace": "surface_terrace",
+        "Total land surface": "total_land_surface",
+        "Sewer Connection": "sewer_connection",
+        "Gas": "gas",
+        "Running water": "running_water",
+        "Swimming pool": "swimming_pool",
+        "Specific primary energy consumption": "specific_primary_energy_consumption",
+        "Validity date EPC/PEB": "validity_date_epc_peb",
+        "CO2 emission": "co2_emission",
+        "Certification - Electrical installation": "certification_electrical_installation",
+        "Flooding Area type": "flooding_area_type",
+        "Demarcated flooding area": "demarcated_flooding_area",
+        "postal_code": "postal_code",
+        "city": "city",
+    }
+
+    # All DB columns (in order)
+    KEY_LIST = list(SCRAPED_TO_DB.values())
 
     @staticmethod
     def get_links_table(metadata):
@@ -101,7 +105,8 @@ class Scraper:
             Column("subtype", String),
             extend_existing=True,
         )
-    
+
+    # Immovlan has a bug where after page 1000, it starts returning the same links again. To avoid this, I added an iteration over postal codes.
     def _fetch_links_for_postal_code(
         self, postal_code, start_page, max_pages, property_type, headers
     ):
@@ -125,7 +130,7 @@ class Scraper:
                 page_links = set()
                 for link in links_elements:
                     href = link.get("href")
-                    if href and 'projectdetail' not in href:
+                    if href and "projectdetail" not in href:
                         page_links.add(href)
                 print(
                     f"    [Postal {postal_code}] Found {len(page_links)} links on page {page_nr}"
@@ -190,9 +195,9 @@ class Scraper:
                     if key_tag and value_tag:
                         key = key_tag.get_text(strip=True)
                         value = value_tag.get_text(strip=True)
-                        if key in key_list:
-                            details[key] = value
-            result = {}
+                        if key in self.SCRAPED_TO_DB:
+                            details[self.SCRAPED_TO_DB[key]] = value
+            result = {k: None for k in self.KEY_LIST}
             result["url"] = url
             result["address"] = street
             result["price"] = price
@@ -220,7 +225,7 @@ class Scraper:
         Scrape links and store them in a DB table with status and timestamp.
         Table is auto-created if it doesn't exist.
         """
-  
+
         engine = get_engine(db_url)
 
         metadata = MetaData()
@@ -237,16 +242,16 @@ class Scraper:
         }
 
         postal_codes = (
-            pd.read_csv("src/georef-belgium-postal-codes@public.csv", delimiter=";")[
-                "Post code"
-            ]
+            pd.read_csv(
+                "scraper/src/georef-belgium-postal-codes@public.csv", delimiter=";"
+            )["Post code"]
             .astype(str)
             .tolist()
         )
 
         all_links = []
         now = datetime.now()
-        batch_size = 1
+        batch_size = 20
 
         for i in range(0, len(postal_codes), batch_size):
             batch = postal_codes[i : i + batch_size]
@@ -352,7 +357,7 @@ class Scraper:
                 stmt = stmt.on_conflict_do_nothing(index_elements=["url"])
                 with engine.begin() as conn:
                     conn.execute(stmt)
-            
+
             print(f"✅ Processed {url} with status {status}")
 
             # Update link status
