@@ -4,8 +4,8 @@ import pandas as pd
 
 def fetch_data():
     with Scraper() as scraper:
-        scraper.fetch_immo_list(property_type='house', max_pages=5)
-        # scraper.fetch_details_soup_multithread(property_type='house')
+        scraper.store_links_in_db(max_pages=1, property_type='house')
+        # scraper.fetch_and_store_details_from_db()
     # inspect()
 
 
