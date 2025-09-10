@@ -9,13 +9,13 @@ from utils.type_conversion import (
     convert_to_boolean,
 )
 
+
 def read_data_from_db():
     engine = get_engine()
     df = pd.DataFrame()
     with engine.connect() as conn:
         result = conn.execute("SELECT * FROM property_details")
         return pd.DataFrame(result.fetchall(), columns=result.keys())
-
 
 
 def fix_types(df):
@@ -73,11 +73,23 @@ def fix_types(df):
 
     print(df.info())
 
+
 def prepare_data_for_analysis():
+    from utils.preprocessing_utils import remove_outliers
+
     df = read_data_from_db()
     df = df.drop_duplicates(subset=["url"]).reset_index(drop=True)
     fix_types(df)
-    # To do: remove outliers, further cleaning...
+    # Remove outliers (analysis-relevant columns)
+    df = remove_outliers(
+        df,
+        [
+            "price",
+            "livable_surface",
+            "number_of_bedrooms",
+            "specific_primary_energy_consumption",
+        ],
+    )
 
     # Insert cleaned dataframe into a new table
 
@@ -109,4 +121,3 @@ def prepare_data_for_analysis():
 
 if __name__ == "__main__":
     prepare_data_for_analysis()
-

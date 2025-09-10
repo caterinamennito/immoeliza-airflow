@@ -1,3 +1,35 @@
+def remove_outliers(df, cols, method="iqr", factor=1.5):
+    """
+    Remove outliers from DataFrame for specified columns using IQR or z-score method.
+    Args:
+        df: DataFrame
+        cols: list of column names to check for outliers
+        method: 'iqr' (default) or 'zscore'
+        factor: IQR multiplier (default 1.5) or z-score threshold (default 3)
+    Returns:
+        DataFrame with outliers removed
+    """
+    df_clean = df.copy()
+    if method == "iqr":
+        for col in cols:
+            if col in df_clean.columns:
+                q1 = df_clean[col].quantile(0.25)
+                q3 = df_clean[col].quantile(0.75)
+                iqr = q3 - q1
+                lower = q1 - factor * iqr
+                upper = q3 + factor * iqr
+                df_clean = df_clean[(df_clean[col] >= lower) & (df_clean[col] <= upper)]
+    elif method == "zscore":
+        from scipy.stats import zscore
+
+        for col in cols:
+            if col in df_clean.columns:
+                z = np.abs(zscore(df_clean[col].dropna()))
+                mask = z < factor
+                df_clean = df_clean.loc[df_clean[col].dropna().index[mask]]
+    return df_clean
+
+
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OrdinalEncoder

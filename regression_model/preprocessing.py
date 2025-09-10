@@ -8,6 +8,7 @@ from utils.preprocessing_utils import (
     compute_epc_score,
     ordinal_encode_epc_score,
     ordinal_encode_state,
+    remove_outliers,
 )
 from utils.type_conversion import (
     convert_to_int,
@@ -98,6 +99,17 @@ def clean_for_regression(df):
     df["specific_primary_energy_consumption"] = df[
         "specific_primary_energy_consumption"
     ].fillna(df["specific_primary_energy_consumption"].median())
+
+    # Remove outliers (regression-relevant columns)
+    df = remove_outliers(
+        df,
+        [
+            "price",
+            "livable_surface",
+            "number_of_bedrooms",
+            "specific_primary_energy_consumption",
+        ],
+    )
 
     # Compute and encode EPC score
     df = compute_epc_score(df, col="specific_primary_energy_consumption")
