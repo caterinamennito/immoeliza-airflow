@@ -12,6 +12,7 @@ from sqlalchemy import (
     String,
     DateTime,
     Text,
+    UniqueConstraint,
     insert,
     select,
     update,
@@ -90,11 +91,13 @@ class Scraper:
             Column("property_type", String),
             Column("status", String),
             Column("scrape_timestamp", DateTime),
+            UniqueConstraint("url", name="uq_links_url"),
             extend_existing=True,
         )
 
     @classmethod
     def get_details_table(cls, metadata, property_type):
+
         return Table(
             "property_details",
             metadata,
@@ -103,6 +106,7 @@ class Scraper:
             Column("type", String),
             Column("scrape_timestamp", DateTime),
             Column("subtype", String),
+            UniqueConstraint("url", name="uq_property_details_url"),
             extend_existing=True,
         )
 

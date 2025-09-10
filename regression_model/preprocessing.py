@@ -1,7 +1,7 @@
 from utils.db_utils import get_engine
 import pandas as pd
 import numpy as np
-from sqlalchemy import Column, Integer, Float, MetaData, Table, Text
+from sqlalchemy import Column, Integer, Float, MetaData, Table, Text, UniqueConstraint
 from sqlalchemy import inspect
 from sklearn.preprocessing import OneHotEncoder
 from utils.preprocessing_utils import (
@@ -148,7 +148,14 @@ def prepare_data_for_regression():
         dtype = str(df_clean[col].dtype)
         coltype = dtype_map.get(dtype, Float)
         columns.append(Column(col, coltype))
-    table = Table(table_name, metadata, *columns, extend_existing=True)
+
+    table = Table(
+        table_name,
+        metadata,
+        *columns,
+        UniqueConstraint("url", name="uq_property_details_for_regression_url"),
+        extend_existing=True
+    )
     metadata.create_all(engine)
     records = df_clean.replace({pd.NaT: None, np.nan: None}).to_dict(orient="records")
     with engine.begin() as conn:

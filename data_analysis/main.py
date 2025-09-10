@@ -1,7 +1,17 @@
 from utils.db_utils import get_engine
 import pandas as pd
 import numpy as np
-from sqlalchemy import Column, Integer, Float, Boolean, DateTime, Text, MetaData, Table
+from sqlalchemy import (
+    Column,
+    Integer,
+    Float,
+    Boolean,
+    DateTime,
+    Text,
+    MetaData,
+    Table,
+    UniqueConstraint,
+)
 from utils.type_conversion import (
     convert_to_int,
     extract_leading_float,
@@ -110,7 +120,13 @@ def prepare_data_for_analysis():
         dtype = str(df[col].dtype)
         coltype = dtype_map.get(dtype, Text)
         columns.append(Column(col, coltype))
-    table = Table(table_name, metadata, *columns, extend_existing=True)
+    table = Table(
+        table_name,
+        metadata,
+        *columns,
+        UniqueConstraint("url", name="uq_property_details_for_analysis_url"),
+        extend_existing=True
+    )
     metadata.create_all(engine)
     # Prevent NaT and NaN issues with SQLAlchemy
     records = df.replace({pd.NaT: None, np.nan: None}).to_dict(orient="records")
