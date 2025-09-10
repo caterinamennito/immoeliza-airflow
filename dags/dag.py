@@ -6,8 +6,8 @@ import pendulum
 with DAG(
     dag_id="immoeliza_etl",
     # start_date=datetime(year=2025, month=9, day=8, hour=16, minute=0),
-    start_date=pendulum.now("Europe/Brussels").add(minutes=5),
-    schedule="@once",
+    start_date=pendulum.datetime(2025, 9, 10, 14, 55, tz="Europe/Brussels"),
+    schedule="@daily",
     catchup=False,
     max_active_runs=1,
     render_template_as_native_obj=True,
