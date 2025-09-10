@@ -1,99 +1,131 @@
 import streamlit as st
-import pickle
 import pandas as pd
-import catboost
+import numpy as np
+import pickle
+from regression_model.preprocessing import clean_for_regression
+
 
 def predict_price(df):
-    with open("../regression_model/model.pkl", "rb") as f:
-        unpickled_model = pickle.load(f)
-        print("Model loaded successfully.")
-        first_row = df.iloc[0:1] 
-        print("first row:",first_row)
+    with open("regression_model/model.pkl", "rb") as f:
+        model = pickle.load(f)
+        return model.predict(df)[0]
 
-        res = unpickled_model.predict(first_row)[0]
-        return f"{int(res):,d}".replace(",", ".")
 
-st.title("Property Price Estimator")
+def postal_code_to_latlon(
+    postal_code, geo_csv_path="scraper/src/georef-belgium-postal-codes@public.csv"
+):
+    df_geo = pd.read_csv(geo_csv_path, sep=";")
+    match = df_geo.loc[df_geo["Post code"].astype(str) == str(postal_code), "Geo Point"]
+    if len(match) > 0:
+        lat, lon = match.iloc[0].split(",")
+        return float(lat), float(lon)
+    else:
+        return np.nan, np.nan
+
+
 st.set_page_config(layout="centered")
+st.title("Property Price Estimator")
 
-@st.dialog("✅ Price Predicted")
-
-def show_prediction(prediction):
-    st.markdown(f"The predicted price is: **{prediction}€**")
-
-if "show_prediction" not in st.session_state:
-
-    with st.form("prediction_form"):
-        area = st.slider("Property size (m²)*", 10, 700, 100)
-
-        property_type = st.radio(
-        "Select the property type*",
-        ["House", "Apartment", "Other"],
+with st.form("prediction_form"):
+    number_of_bedrooms = st.number_input(
+        "Number of bedrooms", min_value=0, max_value=20, value=2
     )
-        zip_code = st.text_input("Enter a zip code*")
-
-        rooms_number = st.number_input(
-        "Choose the number of rooms*", value=1, placeholder="Rooms number"
+    livable_surface = st.number_input(
+        "Livable surface (m²)", min_value=10.0, max_value=1000.0, value=80.0
     )
-        with st.expander("See optional fields"):
-            options = ["A+","A", "B", "C", "D", "E", "F", "G"]
-            epc_score = st.selectbox("EPC score", options, index=None)
+    garden = st.checkbox("Garden")
+    terrace = st.checkbox("Terrace")
+    swimming_pool = st.checkbox("Swimming pool")
+    epc_score = st.selectbox(
+        "EPC score",
+        ["A", "B", "C", "D", "E", "F"],
+        index=4,
+    )
+    postal_code = st.text_input("Postal code", value="1000")
+    property_type = st.radio("Property type", ["apartment", "house"], index=0)
+    state_of_the_property = st.selectbox(
+        "State of the property",
+        [
+            "To renovate",
+            "To demolish",
+            "New",
+            "Under construction",
+            "To be renovated",
+            "Normal",
+            "To restore",
+            "Fully renovated",
+            "Excellent",
+        ],
+        index=5,
+    )
+    submitted = st.form_submit_button("Predict")
 
-            options = [ "NEW" , "GOOD" , "TO RENOVATE" , "JUST RENOVATED" , "TO REBUILD"]
-            building_state = st.selectbox("Building state", options, index=None)
-
-            land_area = st.number_input(
-            "Land area", value=None, placeholder=""
+if submitted:
+    # Convert postal code to latitude and longitude
+    latitude, longitude = postal_code_to_latlon(postal_code)
+    if np.isnan(latitude) or np.isnan(longitude):
+        st.error(
+            "Invalid or unknown postal code. Please enter a valid Belgian postal code."
         )
-            garden_area = st.number_input(
-            "Garden area", value=None, placeholder=""
-        )
-            full_address = st.text_input("Enter the full address", "")
+    else:
+        # Build input DataFrame
+        input_dict = {
+            "number_of_bedrooms": [number_of_bedrooms],
+            "livable_surface": [livable_surface],
+            "garden": [int(garden)],
+            "terrace": [int(terrace)],
+            "swimming_pool": [int(swimming_pool)],
+            "epc_score": [epc_score],
+            "latitude": [latitude],
+            "longitude": [longitude],
+            "type": [property_type],
+            "state_of_the_property": [state_of_the_property],
+        }
+        input_df = pd.DataFrame(input_dict)
 
-            terrace_area = st.text_input("Terrace area", "")
+        # Use model's preprocessing (adapted for single row)
+        def preprocess_for_prediction(df):
+            # One-hot encode 'type' column
+            df = pd.get_dummies(df, columns=["type"], drop_first=True, dtype=int)
+            if "type_house" not in df.columns:
+                df["type_house"] = 0  # Ensure both dummies always present
+            # Ordinal encode 'state_of_the_property'
+            from sklearn.preprocessing import OrdinalEncoder
 
-            options = ["1", "2","3","4"]
-            facades_number = st.selectbox("Number of facades", options, index=None)
+            oe2 = OrdinalEncoder(
+                categories=[
+                    [
+                        "To renovate",
+                        "To demolish",
+                        "New",
+                        "Under construction",
+                        "To be renovated",
+                        "Normal",
+                        "To restore",
+                        "Fully renovated",
+                        "Excellent",
+                    ]
+                ]
+            )
+            df[["state_of_the_property"]] = df[["state_of_the_property"]].fillna(
+                "Normal"
+            )
+            df["state_of_property_encoded"] = oe2.fit_transform(
+                df[["state_of_the_property"]]
+            )
+            df = df.drop(columns=["state_of_the_property"])
+            # Ordinal encode 'epc_score' column
+            oe3 = OrdinalEncoder(categories=[["A", "B", "C", "D", "E", "F"]])
+            df["epc_score_encoded"] = oe3.fit_transform(df[["epc_score"]])
+            df = df.drop(columns=["epc_score"])
+            # Ensure all columns are numeric
+            for col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+            return df
 
-            furnished = st.toggle("Furnished")
-            open_fire = st.toggle("Open fire")
-            terrace = st.toggle("Terrace")
-            garden = st.toggle("With garden")
-            swimming_pool = st.toggle("With swimming pool")
-            equipped_kitchen = st.toggle("Equipped kitchen")
-
-
-
-        submitted = st.form_submit_button("Submit")
-
-        if submitted:
-            data_dict = {
-                "area": area,
-                "property-type": property_type,
-                "zip-code": zip_code,
-                "rooms-number": rooms_number,
-                "epc-score": epc_score,
-                "building-state": building_state,
-                "land-area": land_area,
-                "garden-area": garden_area,
-                "full-address": full_address,
-                "terrace-area": terrace_area,
-                "facades-number": facades_number,
-                "equipped-kitchen": equipped_kitchen,
-                "swimming-pool": swimming_pool,
-                "furnished": furnished,
-                "open-fire": open_fire,
-                "terrace": terrace,
-                "garden": garden,
-            }
-            try:
-                if zip_code == '':
-                    raise ValueError(
-            "Zip code can't be empty. Please provide a valid Belgian postal code."
-        )
-                pre_processed_data = pre_process_data(data_dict)
-                prediction = predict_price(pre_processed_data)
-                show_prediction(prediction)
-
-            except Exception as e:
-                st.error(f'An error occurred: {e}', icon="🚨")
+        processed = preprocess_for_prediction(input_df.copy())
+        try:
+            prediction = predict_price(processed)
+            st.success(f"Predicted price: {int(prediction):,} €".replace(",", "."))
+        except Exception as e:
+            st.error(f"Prediction failed: {e}")

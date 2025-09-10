@@ -119,7 +119,8 @@ def clean_for_regression(df):
     # Ordinal encode 'epc_score' column
     oe3 = OrdinalEncoder(categories=[["A", "B", "C", "D", "E", "F"]])
     df["epc_score_encoded"] = oe3.fit_transform(df[["epc_score"]])
-    df = df.drop(columns=["epc_score"])
+    df = df.drop(columns=["epc_score", 'specific_primary_energy_consumption'])
+    features = [f for f in features if f != "specific_primary_energy_consumption"]
 
     # Drop rows with missing target or features
     df = df.dropna(subset=[target] + features)
