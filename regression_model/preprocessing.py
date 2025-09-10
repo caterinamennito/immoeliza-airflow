@@ -1,12 +1,12 @@
 from utils.db_utils import get_engine
 import pandas as pd
 import numpy as np
-from sqlalchemy import Column, Integer, Float, Boolean, MetaData, Table, Text
+from sqlalchemy import Column, Integer, Float, MetaData, Table, Text
 from sqlalchemy import inspect
+from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder
 from utils.type_conversion import (
     convert_to_int,
     extract_leading_float,
-    convert_to_date,
     convert_to_boolean,
 )
 
@@ -47,6 +47,7 @@ def clean_for_regression(df):
         "specific_primary_energy_consumption",
         "latitude",
         "longitude",
+        "type",
     ]
 
     geo_csv_path = "scraper/src/georef-belgium-postal-codes@public.csv"
@@ -86,15 +87,38 @@ def clean_for_regression(df):
     bool_cols = ["garden", "terrace", "swimming_pool"]
     for col in bool_cols:
         df[col] = df[col].astype(int)
+    
+    # One-hot encode 'type' column
+    df = pd.get_dummies(df, columns=["type"], drop_first=True)
 
+    # Ordinal encode 'state_of_the_property' column
+    oe2 = OrdinalEncoder(
+        categories=[
+            [
+                "To renovate",
+                "To demolish",
+                "New",
+                "Under construction",
+                "To be renovated",
+                "Normal",
+                "To restore",
+                "Fully renovated",
+                "Excellent"
+            ]
+        ]
+    )
+    df["state_of_property_encoded"] = oe2.fit_transform(df[["state_of_property"]].fillna("Normal"))
+ 
+    #  TODO: create categories for 'epc_score' and ordinal encode it
+
+    # drop NA rows
     # Final check: ensure all columns are numeric
     for col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     df = df.dropna()
     return df
 
-
-if __name__ == "__main__":
+def prepare_data_for_regression():
     df = read_data_from_db()
     df_clean = clean_for_regression(df)
     print(df_clean.info())
