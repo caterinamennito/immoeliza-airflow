@@ -120,6 +120,9 @@ def prepare_data_for_analysis():
         dtype = str(df[col].dtype)
         coltype = dtype_map.get(dtype, Text)
         columns.append(Column(col, coltype))
+    inspector = engine.dialect.get_inspector(engine)
+    if inspector.has_table(table_name):
+        Table(table_name, metadata, autoload_with=engine).drop(engine)
     table = Table(
         table_name,
         metadata,

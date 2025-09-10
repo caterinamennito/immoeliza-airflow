@@ -83,9 +83,15 @@ class Scraper:
     KEY_LIST = list(SCRAPED_TO_DB.values())
 
     @staticmethod
-    def get_links_table(metadata):
+    def get_links_table(metadata, engine=None):
+        from sqlalchemy import UniqueConstraint
+        table_name = "links"
+        if engine is not None:
+            inspector = engine.dialect.get_inspector(engine)
+            if inspector.has_table(table_name):
+                Table(table_name, metadata, autoload_with=engine).drop(engine)
         return Table(
-            "links",
+            table_name,
             metadata,
             Column("url", String, primary_key=True),
             Column("property_type", String),
@@ -94,12 +100,17 @@ class Scraper:
             UniqueConstraint("url", name="uq_links_url"),
             extend_existing=True,
         )
-
+    
     @classmethod
-    def get_details_table(cls, metadata, property_type):
-
+    def get_details_table(cls, metadata, property_type, engine=None):
+        from sqlalchemy import UniqueConstraint
+        table_name = "property_details"
+        if engine is not None:
+            inspector = engine.dialect.get_inspector(engine)
+            if inspector.has_table(table_name):
+                Table(table_name, metadata, autoload_with=engine).drop(engine)
         return Table(
-            "property_details",
+            table_name,
             metadata,
             Column("url", String, primary_key=True),
             *(Column(k, Text) for k in cls.KEY_LIST if k != "url"),
