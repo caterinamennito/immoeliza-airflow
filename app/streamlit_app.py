@@ -4,6 +4,11 @@ import numpy as np
 import pickle
 from sqlalchemy import create_engine
 from regression_model.preprocessing import clean_for_regression
+from utils.preprocessing_utils import (
+    compute_epc_score,
+    ordinal_encode_epc_score,
+    ordinal_encode_state,
+)
 
 
 def predict_price(df):
@@ -94,34 +99,10 @@ with tab1:
                 df = pd.get_dummies(df, columns=["type"], drop_first=True, dtype=int)
                 if "type_house" not in df.columns:
                     df["type_house"] = 0  # Ensure both dummies always present
-                # Ordinal encode 'state_of_the_property'
-                from sklearn.preprocessing import OrdinalEncoder
-
-                oe2 = OrdinalEncoder(
-                    categories=[
-                        [
-                            "To renovate",
-                            "To demolish",
-                            "New",
-                            "Under construction",
-                            "To be renovated",
-                            "Normal",
-                            "To restore",
-                            "Fully renovated",
-                            "Excellent",
-                        ]
-                    ]
-                )
-                df[["state_of_the_property"]] = df[["state_of_the_property"]].fillna(
-                    "Normal"
-                )
-                df["state_of_property_encoded"] = oe2.fit_transform(
-                    df[["state_of_the_property"]]
-                )
+                # Ordinal encode 'state_of_the_property' and 'epc_score' using shared utils
+                df = ordinal_encode_state(df, col="state_of_the_property")
                 df = df.drop(columns=["state_of_the_property"])
-                # Ordinal encode 'epc_score' column
-                oe3 = OrdinalEncoder(categories=[["A", "B", "C", "D", "E", "F"]])
-                df["epc_score_encoded"] = oe3.fit_transform(df[["epc_score"]])
+                df = ordinal_encode_epc_score(df, col="epc_score")
                 df = df.drop(columns=["epc_score"])
                 # Ensure all columns are numeric
                 for col in df.columns:
@@ -159,11 +140,7 @@ with tab2:
         st.bar_chart(df.groupby("number_of_bedrooms")["price"].mean())
         st.subheader("Average Price by EPC Score")
         if "specific_primary_energy_consumption" in df.columns:
-            bins = [0, 100, 200, 300, 400, 500, float("inf")]
-            labels = ["A", "B", "C", "D", "E", "F"]
-            df["epc_score"] = pd.cut(
-                df["specific_primary_energy_consumption"], bins=bins, labels=labels
-            ).fillna("E")
+            df = compute_epc_score(df, col="specific_primary_energy_consumption")
             st.bar_chart(df.groupby("epc_score")["price"].mean())
         else:
             st.warning(

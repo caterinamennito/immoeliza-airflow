@@ -3,7 +3,12 @@ import pandas as pd
 import numpy as np
 from sqlalchemy import Column, Integer, Float, MetaData, Table, Text
 from sqlalchemy import inspect
-from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder
+from utils.preprocessing_utils import (
+    compute_epc_score,
+    ordinal_encode_epc_score,
+    ordinal_encode_state,
+)
 from utils.type_conversion import (
     convert_to_int,
     extract_leading_float,
@@ -85,25 +90,7 @@ def clean_for_regression(df):
     features = [f for f in features if f != "type"] + ["type_house"]
 
     # Ordinal encode 'state_of_the_property' column
-    oe2 = OrdinalEncoder(
-        categories=[
-            [
-                "To renovate",
-                "To demolish",
-                "New",
-                "Under construction",
-                "To be renovated",
-                "Normal",
-                "To restore",
-                "Fully renovated",
-                "Excellent",
-            ]
-        ]
-    )
-    df[["state_of_the_property"]] = df[["state_of_the_property"]].fillna("Normal")
-
-    df["state_of_property_encoded"] = oe2.fit_transform(df[["state_of_the_property"]])
-    # Drop the original column after encoding
+    df = ordinal_encode_state(df, col="state_of_the_property")
     df = df.drop(columns=["state_of_the_property"])
     features = [f for f in features if f != "state_of_the_property"]
 
@@ -112,14 +99,10 @@ def clean_for_regression(df):
         "specific_primary_energy_consumption"
     ].fillna(df["specific_primary_energy_consumption"].median())
 
-    # Create categories for 'specific_primary_energy_consumption'
-    bins = [0, 100, 200, 300, 400, 500, np.inf]
-    labels = ["A", "B", "C", "D", "E", "F"]
-    df["epc_score"] = pd.cut(df["specific_primary_energy_consumption"], bins=bins, labels=labels).fillna("E")
-    # Ordinal encode 'epc_score' column
-    oe3 = OrdinalEncoder(categories=[["A", "B", "C", "D", "E", "F"]])
-    df["epc_score_encoded"] = oe3.fit_transform(df[["epc_score"]])
-    df = df.drop(columns=["epc_score", 'specific_primary_energy_consumption'])
+    # Compute and encode EPC score
+    df = compute_epc_score(df, col="specific_primary_energy_consumption")
+    df = ordinal_encode_epc_score(df, col="epc_score")
+    df = df.drop(columns=["epc_score", "specific_primary_energy_consumption"])
     features = [f for f in features if f != "specific_primary_energy_consumption"]
 
     # Drop rows with missing target or features
