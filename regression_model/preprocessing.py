@@ -39,7 +39,6 @@ def add_lat_lon(df, geo_csv_path):
 def clean_for_regression(df):
     features = [
         "number_of_bedrooms",
-        "build_year",
         "livable_surface",
         "garden",
         "terrace",
@@ -48,6 +47,7 @@ def clean_for_regression(df):
         "latitude",
         "longitude",
         "type",
+        "state_of_the_property",
     ]
 
     geo_csv_path = "scraper/src/georef-belgium-postal-codes@public.csv"
@@ -59,12 +59,16 @@ def clean_for_regression(df):
     keep_cols = features + [target]
     df = df[keep_cols]
 
-    # Drop rows with missing target or features
-    df = df.dropna(subset=[target] + features)
+    bool_cols = ["garden", "terrace", "swimming_pool"]
+    for col in bool_cols:
+        convert_to_boolean(df, col)
+
+    # hot-encode booleans. Assume NA = False
+    for col in bool_cols:
+        df[col] = df[col].astype(int)
 
     for col in [
         "number_of_bedrooms",
-        "build_year",
         "price",
     ]:
         convert_to_int(df, col)
@@ -76,20 +80,9 @@ def clean_for_regression(df):
     ]:
         extract_leading_float(df, col)
 
-    for col in [
-        "garden",
-        "terrace",
-        "swimming_pool",
-    ]:
-        convert_to_boolean(df, col)
-
-    # hot-encode booleans
-    bool_cols = ["garden", "terrace", "swimming_pool"]
-    for col in bool_cols:
-        df[col] = df[col].astype(int)
-    
     # One-hot encode 'type' column
-    df = pd.get_dummies(df, columns=["type"], drop_first=True)
+    df = pd.get_dummies(df, columns=["type"], drop_first=True, dtype=int)
+    features = [f for f in features if f != "type"] + ["type_house"]
 
     # Ordinal encode 'state_of_the_property' column
     oe2 = OrdinalEncoder(
@@ -103,20 +96,38 @@ def clean_for_regression(df):
                 "Normal",
                 "To restore",
                 "Fully renovated",
-                "Excellent"
+                "Excellent",
             ]
         ]
     )
-    df["state_of_property_encoded"] = oe2.fit_transform(df[["state_of_property"]].fillna("Normal"))
- 
-    #  TODO: create categories for 'epc_score' and ordinal encode it
+    df[["state_of_the_property"]] = df[["state_of_the_property"]].fillna("Normal")
 
-    # drop NA rows
+    df["state_of_property_encoded"] = oe2.fit_transform(df[["state_of_the_property"]])
+    # Drop the original column after encoding
+    df = df.drop(columns=["state_of_the_property"])
+    features = [f for f in features if f != "state_of_the_property"]
+
+    # ~5000 missing values, replace with median to avoid losing too many rows
+    df["specific_primary_energy_consumption"] = df[
+        "specific_primary_energy_consumption"
+    ].fillna(df["specific_primary_energy_consumption"].median())
+
+    # Create categories for 'specific_primary_energy_consumption'
+    bins = [0, 100, 200, 300, 400, 500, np.inf]
+    labels = ["A", "B", "C", "D", "E", "F"]
+    df["epc_score"] = pd.cut(df["specific_primary_energy_consumption"], bins=bins, labels=labels).fillna("E")
+    # Ordinal encode 'epc_score' column
+    oe3 = OrdinalEncoder(categories=[["A", "B", "C", "D", "E", "F"]])
+    df["epc_score_encoded"] = oe3.fit_transform(df[["epc_score"]])
+    df = df.drop(columns=["epc_score"])
+
+    # Drop rows with missing target or features
+    df = df.dropna(subset=[target] + features)
     # Final check: ensure all columns are numeric
     for col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce")
-    df = df.dropna()
     return df
+
 
 def prepare_data_for_regression():
     df = read_data_from_db()
@@ -146,3 +157,4 @@ def prepare_data_for_regression():
     records = df_clean.replace({pd.NaT: None, np.nan: None}).to_dict(orient="records")
     with engine.begin() as conn:
         conn.execute(table.insert(), records)
+    return df_clean
