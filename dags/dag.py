@@ -1,12 +1,14 @@
 from airflow import DAG
 from airflow.decorators import task
 from datetime import datetime
+import pendulum
 
 with DAG(
     dag_id="immoeliza_etl",
-    start_date=datetime(year=2025, month=9, day=8, hour=16, minute=0),
-    schedule="@daily",
-    catchup=True,
+    # start_date=datetime(year=2025, month=9, day=8, hour=16, minute=0),
+    start_date=pendulum.now("Europe/Brussels").add(minutes=5),
+    schedule="@once",
+    catchup=False,
     max_active_runs=1,
     render_template_as_native_obj=True,
 ) as dag:
@@ -35,11 +37,11 @@ with DAG(
 
         prepare_data_for_regression()
 
-    # t1 = fetch_data_apartment()
-    # t2 = fetch_data_house()
-    # t3 = prepare_data_for_analysis_task()
+    t1 = fetch_data_apartment()
+    t2 = fetch_data_house()
+    t3 = prepare_data_for_analysis_task()
     t4 = prepare_data_for_regression_task()
 
-    # t1 >> [t3, t4]
-    # t2 >> [t3, t4]
+    t1 >> [t3, t4]
+    t2 >> [t3, t4]
 
