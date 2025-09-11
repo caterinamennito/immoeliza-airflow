@@ -16,7 +16,6 @@ from sqlalchemy import (
     insert,
     select,
     update,
-    inspect
 )
 from datetime import datetime
 import time
@@ -88,11 +87,6 @@ class Scraper:
         from sqlalchemy import UniqueConstraint
 
         table_name = "links"
-        if engine is not None:
-
-            inspector = inspect(engine)
-            if inspector != None and inspector.has_table(table_name):
-                Table(table_name, metadata, autoload_with=engine).drop(engine)
         return Table(
             table_name,
             metadata,
@@ -109,11 +103,6 @@ class Scraper:
         from sqlalchemy import UniqueConstraint
 
         table_name = "property_details"
-        if engine is not None:
-
-            inspector = inspect(engine)
-            if inspector is not None and inspector.has_table(table_name):
-                Table(table_name, metadata, autoload_with=engine).drop(engine)
         return Table(
             table_name,
             metadata,
@@ -130,8 +119,21 @@ class Scraper:
     def _fetch_links_for_postal_code(
         self, postal_code, start_page, max_pages, property_type, headers
     ):
+        """
+        Fetch links for a postal code, but stop if all links already exist in the DB.
+        """
         print(f"[START] Postal code {postal_code}")
         links = set()
+        engine = get_engine()
+        from sqlalchemy import MetaData, select
+
+        metadata = MetaData()
+        links_table = self.get_links_table(metadata)
+        metadata.create_all(engine, checkfirst=True)
+        with engine.connect() as conn:
+            result = conn.execute(select(links_table.c.url))
+            existing_urls = {row[0] for row in result}
+
         for page_nr in range(start_page, start_page + max_pages):
             url = self.get_url(page_nr, postal_code, property_type=property_type)
             print(f"  [Postal {postal_code}] Fetching page {page_nr}: {url}")
@@ -160,7 +162,8 @@ class Scraper:
                         f"    [Postal {postal_code}] No more links on page {page_nr}, stopping."
                     )
                     break
-                new_links = page_links - links
+                # Remove links that already exist in the DB
+                new_links = page_links - existing_urls - links
                 if not new_links:
                     print(
                         f"    [Postal {postal_code}] No new links on page {page_nr}, stopping."

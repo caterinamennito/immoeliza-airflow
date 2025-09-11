@@ -56,6 +56,8 @@ def clean_for_regression(df):
         "state_of_the_property",
     ]
 
+    # drop duplicate urls
+    df = df.drop_duplicates(subset=["url"])
     geo_csv_path = "scraper/src/georef-belgium-postal-codes@public.csv"
     # Add latitude and longitude columns based on postal_code (must be present)
     df = add_lat_lon(df, geo_csv_path)
@@ -143,25 +145,12 @@ def prepare_data_for_regression():
         "Int64": Integer,
         "float64": Float,
     }
-    columns = []
-    # Drop rows where 'url' is missing, to enforce unique constraint
-    if "url" in df_clean.columns:
-        df_clean = df_clean.dropna(subset=["url"])
-    for col in df_clean.columns:
-        dtype = str(df_clean[col].dtype)
-        coltype = dtype_map.get(dtype, Float)
-        if col == "url":
-            columns.append(Column(col, Text))
-        else:
-            columns.append(Column(col, coltype))
+    columns = [
+        Column(col, dtype_map.get(str(df_clean[col].dtype), Float))
+        for col in df_clean.columns
+    ]
 
-    table = Table(
-        table_name,
-        metadata,
-        *columns,
-        UniqueConstraint("url", name="uq_property_details_for_regression_url"),
-        extend_existing=True
-    )
+    table = Table(table_name, metadata, *columns, extend_existing=True)
     metadata.create_all(engine)
     records = df_clean.replace({pd.NaT: None, np.nan: None}).to_dict(orient="records")
     with engine.begin() as conn:

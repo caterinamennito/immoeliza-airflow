@@ -11,7 +11,6 @@ from sqlalchemy import (
     MetaData,
     Table,
     UniqueConstraint,
-    inspect
 )
 from utils.type_conversion import (
     convert_to_int,
@@ -88,6 +87,7 @@ def prepare_data_for_analysis():
     from utils.preprocessing_utils import remove_outliers
 
     df = read_data_from_db()
+    # DataFrame-level deduplication
     df = df.drop_duplicates(subset=["url"]).reset_index(drop=True)
     fix_types(df)
     # Remove outliers (analysis-relevant columns)
@@ -102,7 +102,6 @@ def prepare_data_for_analysis():
     )
 
     # Insert cleaned dataframe into a new table
-
     engine = get_engine()
     metadata = MetaData()
     table_name = "property_details_for_analysis"
@@ -121,9 +120,6 @@ def prepare_data_for_analysis():
         coltype = dtype_map.get(dtype, Text)
         columns.append(Column(col, coltype))
 
-    inspector = inspect(engine)
-    if inspector is not None and inspector.has_table(table_name):
-        Table(table_name, metadata, autoload_with=engine).drop(engine)
     table = Table(
         table_name,
         metadata,
@@ -134,9 +130,14 @@ def prepare_data_for_analysis():
     metadata.create_all(engine)
     # Prevent NaT and NaN issues with SQLAlchemy
     records = df.replace({pd.NaT: None, np.nan: None}).to_dict(orient="records")
-    # Insert data
-    with engine.begin() as conn:
-        conn.execute(table.insert(), records)
+    # Insert data with ON CONFLICT DO NOTHING (PostgreSQL only)
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    if records:
+        stmt = pg_insert(table).values(records)
+        stmt = stmt.on_conflict_do_nothing(index_elements=["url"])
+        with engine.begin() as conn:
+            conn.execute(stmt)
 
 
 if __name__ == "__main__":

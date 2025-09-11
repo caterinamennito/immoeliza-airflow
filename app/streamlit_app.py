@@ -14,7 +14,8 @@ from utils.preprocessing_utils import (
 def predict_price(df):
     with open("/opt/airflow/regression_model/model.pkl", "rb") as f:
         model = pickle.load(f)
-        return model.predict(df)[0]
+        log_pred = model.predict(df)[0]
+        return np.expm1(log_pred)
 
 
 def postal_code_to_latlon(
@@ -31,6 +32,39 @@ def postal_code_to_latlon(
 
 st.set_page_config(layout="centered")
 st.title("Property Price Estimator")
+
+# Show last updated at (latest scrape_timestamp from property_details)
+import os
+
+AIRFLOW_CONN = os.environ.get(
+    "AIRFLOW__CORE__SQL_ALCHEMY_CONN",
+    "postgresql+psycopg2://airflow:airflow@postgres:5432/airflow",
+)
+try:
+    import pytz
+    from datetime import datetime
+
+    engine = create_engine(AIRFLOW_CONN)
+    last_update = pd.read_sql(
+        "SELECT MAX(scrape_timestamp) as last_updated FROM property_details",
+        engine,
+    )
+    last_updated = last_update["last_updated"].iloc[0]
+    if pd.notnull(last_updated):
+        # Convert to CEST (Europe/Brussels)
+        if not pd.isna(last_updated):
+            if not hasattr(last_updated, "tzinfo") or last_updated.tzinfo is None:
+                last_updated = pd.Timestamp(last_updated).tz_localize("UTC")
+            last_updated_cest = last_updated.tz_convert("Europe/Brussels")
+            st.info(
+                f"Last updated at: {last_updated_cest.strftime('%Y-%m-%d %H:%M:%S %Z')}"
+            )
+        else:
+            st.info("Last updated at: No data available.")
+    else:
+        st.info("Last updated at: No data available.")
+except Exception as e:
+    st.info(f"Last updated at: (error loading timestamp: {e})")
 
 tab1, tab2 = st.tabs(["Predict Price", "Data Dashboard"])
 
