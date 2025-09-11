@@ -11,6 +11,7 @@ from sqlalchemy import (
     MetaData,
     Table,
     UniqueConstraint,
+    inspect
 )
 from utils.type_conversion import (
     convert_to_int,
@@ -22,7 +23,6 @@ from utils.type_conversion import (
 
 def read_data_from_db():
     engine = get_engine()
-    df = pd.DataFrame()
     with engine.connect() as conn:
         result = conn.execute("SELECT * FROM property_details")
         return pd.DataFrame(result.fetchall(), columns=result.keys())
@@ -120,8 +120,9 @@ def prepare_data_for_analysis():
         dtype = str(df[col].dtype)
         coltype = dtype_map.get(dtype, Text)
         columns.append(Column(col, coltype))
-    inspector = engine.dialect.get_inspector(engine)
-    if inspector.has_table(table_name):
+
+    inspector = inspect(engine)
+    if inspector is not None and inspector.has_table(table_name):
         Table(table_name, metadata, autoload_with=engine).drop(engine)
     table = Table(
         table_name,

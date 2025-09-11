@@ -16,6 +16,7 @@ from sqlalchemy import (
     insert,
     select,
     update,
+    inspect
 )
 from datetime import datetime
 import time
@@ -85,10 +86,12 @@ class Scraper:
     @staticmethod
     def get_links_table(metadata, engine=None):
         from sqlalchemy import UniqueConstraint
+
         table_name = "links"
         if engine is not None:
-            inspector = engine.dialect.get_inspector(engine)
-            if inspector.has_table(table_name):
+
+            inspector = inspect(engine)
+            if inspector != None and inspector.has_table(table_name):
                 Table(table_name, metadata, autoload_with=engine).drop(engine)
         return Table(
             table_name,
@@ -100,14 +103,16 @@ class Scraper:
             UniqueConstraint("url", name="uq_links_url"),
             extend_existing=True,
         )
-    
+
     @classmethod
     def get_details_table(cls, metadata, property_type, engine=None):
         from sqlalchemy import UniqueConstraint
+
         table_name = "property_details"
         if engine is not None:
-            inspector = engine.dialect.get_inspector(engine)
-            if inspector.has_table(table_name):
+
+            inspector = inspect(engine)
+            if inspector is not None and inspector.has_table(table_name):
                 Table(table_name, metadata, autoload_with=engine).drop(engine)
         return Table(
             table_name,

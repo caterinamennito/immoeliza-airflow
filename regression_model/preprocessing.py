@@ -144,10 +144,16 @@ def prepare_data_for_regression():
         "float64": Float,
     }
     columns = []
+    # Drop rows where 'url' is missing, to enforce unique constraint
+    if "url" in df_clean.columns:
+        df_clean = df_clean.dropna(subset=["url"])
     for col in df_clean.columns:
         dtype = str(df_clean[col].dtype)
         coltype = dtype_map.get(dtype, Float)
-        columns.append(Column(col, coltype))
+        if col == "url":
+            columns.append(Column(col, Text))
+        else:
+            columns.append(Column(col, coltype))
 
     table = Table(
         table_name,

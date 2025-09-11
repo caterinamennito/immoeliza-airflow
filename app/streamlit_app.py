@@ -131,20 +131,27 @@ with tab2:
     try:
         engine = create_engine(AIRFLOW_CONN)
         df = pd.read_sql("SELECT * FROM property_details_for_analysis", engine)
-        st.subheader("Sample Data")
-        st.dataframe(df.head())
-        # Example dashboards
-        st.subheader("Price Distribution")
-        st.bar_chart(df["price"].dropna())
         st.subheader("Average Price by Number of Bedrooms")
         st.bar_chart(df.groupby("number_of_bedrooms")["price"].mean())
         st.subheader("Average Price by EPC Score")
-        if "specific_primary_energy_consumption" in df.columns:
-            df = compute_epc_score(df, col="specific_primary_energy_consumption")
-            st.bar_chart(df.groupby("epc_score")["price"].mean())
-        else:
-            st.warning(
-                "No specific_primary_energy_consumption data available in this table."
+        df = compute_epc_score(df, col="specific_primary_energy_consumption")
+        st.bar_chart(df.groupby("epc_score")["price"].mean())
+
+        # Boxplot: Price Distribution by State of the Property
+        st.subheader("Price Distribution by State of the Property")
+        import plotly.express as px
+
+        if "state_of_the_property" in df.columns and "price" in df.columns:
+            box_fig = px.box(
+                df,
+                x="state_of_the_property",
+                y="price",
+                points="outliers",
             )
+            box_fig.update_xaxes(title="State of the Property", tickangle=45)
+            box_fig.update_yaxes(title="Price")
+            st.plotly_chart(box_fig, use_container_width=True)
+        else:
+            st.info("'state_of_the_property' or 'price' column not found in data.")
     except Exception as e:
         st.error(f"Failed to load data or dashboards: {e}")
