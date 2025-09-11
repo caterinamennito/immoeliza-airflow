@@ -1,5 +1,6 @@
 from airflow import DAG
 from airflow.decorators import task
+from airflow.operators.bash import BashOperator
 from datetime import datetime
 
 
@@ -42,6 +43,16 @@ with DAG(
 
         train_model()
 
+    dvc_version_model = BashOperator(
+        task_id="dvc_version_model",
+        bash_command="""
+            dvc add regression_model/model.pkl
+            git add regression_model/model.pkl.dvc
+            git commit -m 'Version new trained model with DVC'
+            dvc push
+        """,
+    )
+
     t1 = fetch_data_apartment()
     t2 = fetch_data_house()
     t3 = prepare_data_for_analysis_task()
@@ -51,4 +62,4 @@ with DAG(
     t1 >> [t3, t4]
     t2 >> [t3, t4]
     t4 >> t5
-
+    t5 >> dvc_version_model
