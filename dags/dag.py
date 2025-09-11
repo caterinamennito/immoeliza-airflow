@@ -2,12 +2,11 @@ from airflow import DAG
 from airflow.decorators import task
 from datetime import datetime
 
-from regression_model.preprocessing import prepare_data_for_regression
 
 with DAG(
     dag_id="immoeliza_etl",
     start_date=datetime(year=2025, month=9, day=8, hour=16, minute=0),
-    schedule="@daily",
+    schedule="@hourly",
     catchup=False,
     max_active_runs=1,
     render_template_as_native_obj=True,
@@ -32,16 +31,24 @@ with DAG(
         prepare_data_for_analysis()
 
     @task
-    def prepare_data_for_regression_and_train_model_task():
-        from regression_model.main import prepare_data_for_regression_and_train_model
+    def prepare_data_for_regression():
+        from regression_model.preprocessing import prepare_data_for_regression
 
-        prepare_data_for_regression_and_train_model()
+        prepare_data_for_regression()
+
+    @task
+    def train_model_task():
+        from regression_model.main import train_model
+
+        train_model()
 
     t1 = fetch_data_apartment()
     t2 = fetch_data_house()
     t3 = prepare_data_for_analysis_task()
-    t4 = prepare_data_for_regression_and_train_model_task()
+    t4 = prepare_data_for_regression()
+    t5 = train_model_task()
 
     t1 >> [t3, t4]
     t2 >> [t3, t4]
+    t4 >> t5
 
