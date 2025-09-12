@@ -176,7 +176,10 @@ class Scraper:
         print(f"[DONE] Postal code {postal_code}: {len(links)} links found.")
         return list(links)
 
-    def _extract_property_details(self, url, property_type, key_list=None):
+    def _extract_property_details(
+        self, url, property_type, key_list=None, scrape_timestamp=None
+    ):
+        result = None  # Ensure result is always defined
         if key_list is None:
             key_list = self.KEY_LIST
         try:
@@ -196,8 +199,12 @@ class Scraper:
             street = address_block.find("span").text if address_block else ""
             price_block = soup.find("span", class_="detail__header_price_data")
             if price_block:
-                price = price_block.get_text(strip=True)
-                price = int(re.sub(r"[^\d]", "", price))
+                price_str = price_block.get_text(strip=True)
+                price_str = re.sub(r"[^\d]", "", price_str)
+                if price_str:
+                    price = int(price_str)
+                else:
+                    return None, "error"
             else:
                 return None, "error"
             postal_code, city = self.extract_postal_code_and_city(url)
@@ -230,7 +237,9 @@ class Scraper:
             result["type"] = type
             for k, v in details.items():
                 result[k] = v
-            result["scrape_timestamp"] = datetime.now()
+            if scrape_timestamp is None:
+                scrape_timestamp = datetime.now()
+            result["scrape_timestamp"] = scrape_timestamp
             return result, "done"
         except Exception as e:
             print(f"❌ Error on {url}: {e}{result}")
@@ -360,6 +369,8 @@ class Scraper:
             except Exception:
                 processed_urls = set()
 
+        batch_scrape_timestamp = datetime.now()
+
         def fetch_and_process(url):
             if url in processed_urls:
                 with engine.begin() as conn:
@@ -372,7 +383,10 @@ class Scraper:
 
             # Scrape property details
             result_dict, status = self._extract_property_details(
-                url, property_type, self.KEY_LIST
+                url,
+                property_type,
+                self.KEY_LIST,
+                scrape_timestamp=batch_scrape_timestamp,
             )
 
             if result_dict:
